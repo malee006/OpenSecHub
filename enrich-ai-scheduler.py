@@ -4,18 +4,17 @@ import datetime
 import os
 import signal
 import sys
+import json # Added for response parsing
 
 # --- Configuration ---
-# IMPORTANT: Replace with your actual Supabase Edge Function URL for 'enrich-ai'
-ENRICH_AI_FUNCTION_URL = 'https://oztlbsrmkzesflszmsem.supabase.co/functions/v1/enrich-ai'
-# IMPORTANT: Replace with your actual Supabase Anon Key.
-# Best practice is to use environment variables for secrets.
-SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96dGxic3Jta3plc2Zsc3ptc2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2NTg2MTcsImV4cCI6MjA2NDIzNDYxN30.lja2lGa9t6SNkhdLOidPLK3geSX12WUGkCkN_E9Fj00'
+# Read from environment variables, with defaults
+ENRICH_AI_FUNCTION_URL = os.getenv('ENRICH_AI_FUNCTION_URL', 'https://oztlbsrmkzesflszmsem.supabase.co/functions/v1/enrich-ai')
+SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96dGxic3Jta3plc2Zsc3ptc2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2NTg2MTcsImV4cCI6MjA2NDIzNDYxN30.lja2lGa9t6SNkhdLOidPLK3geSX12WUGkCkN_E9Fj00')
 
-# How often to call the enrich-ai function (e.g., every 5 minutes)
-CALL_INTERVAL_SECONDS = 300  # 5 minutes * 60 seconds
-# Total duration the script should run (e.g., 1 hour)
-TOTAL_RUN_DURATION_HOURS = 1
+# How often to call the enrich-ai function (in seconds)
+CALL_INTERVAL_SECONDS = int(os.getenv('CALL_INTERVAL_SECONDS', 300))  # Default to 5 minutes
+# Total duration the script should run (in hours)
+TOTAL_RUN_DURATION_HOURS = int(os.getenv('TOTAL_RUN_DURATION_HOURS', 1)) # Default to 1 hour
 
 # Global flag for graceful shutdown
 shutdown_requested = False
@@ -28,11 +27,17 @@ def signal_handler(signum, frame):
 
 def validate_config():
     """Validate that all required configuration is present"""
-    if not ENRICH_AI_FUNCTION_URL or 'your_supabase_project_id' in ENRICH_AI_FUNCTION_URL: # Basic check
-        print("ERROR: ENRICH_AI_FUNCTION_URL not configured correctly. Please update it.")
+    if not ENRICH_AI_FUNCTION_URL or 'oztlbsrmkzesflszmsem' not in ENRICH_AI_FUNCTION_URL: # Basic check for default
+        print(f"ERROR: ENRICH_AI_FUNCTION_URL is not configured correctly or is still the default. Current value: {ENRICH_AI_FUNCTION_URL}")
         return False
-    if not SUPABASE_ANON_KEY or 'YOUR_SUPABASE_ANON_KEY' in SUPABASE_ANON_KEY: # Basic check
-        print("ERROR: SUPABASE_ANON_KEY not configured correctly. Please update it.")
+    if not SUPABASE_ANON_KEY or 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9' not in SUPABASE_ANON_KEY: # Basic check for default
+        print(f"ERROR: SUPABASE_ANON_KEY is not configured correctly or is still the default. Current value: {SUPABASE_ANON_KEY[:20]}...")
+        return False
+    if CALL_INTERVAL_SECONDS <= 0:
+        print(f"ERROR: CALL_INTERVAL_SECONDS must be a positive integer. Current value: {CALL_INTERVAL_SECONDS}")
+        return False
+    if TOTAL_RUN_DURATION_HOURS < 0: # 0 means run indefinitely if logic supports it, but negative is invalid
+        print(f"ERROR: TOTAL_RUN_DURATION_HOURS must be a non-negative integer. Current value: {TOTAL_RUN_DURATION_HOURS}")
         return False
     return True
 
@@ -44,14 +49,13 @@ def invoke_enrich_ai_function():
     
     headers = {
         'Authorization': f'Bearer {SUPABASE_ANON_KEY}',
-        'Content-Type': 'application/json', # Edge functions usually expect a body, even if empty
-        'apikey': SUPABASE_ANON_KEY # Supabase often requires apikey in header too
+        'Content-Type': 'application/json', 
+        'apikey': SUPABASE_ANON_KEY 
     }
     
     try:
-        # Edge functions are typically invoked with POST, even if no significant body is sent
-        response = requests.post(ENRICH_AI_FUNCTION_URL, json={}, headers=headers, timeout=45) # Increased timeout slightly
-        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        response = requests.post(ENRICH_AI_FUNCTION_URL, json={}, headers=headers, timeout=45) 
+        response.raise_for_status()  
         
         print(f"[{datetime.datetime.now()}] AI Enrichment Function call successful! Status Code: {response.status_code}")
         try:
@@ -70,7 +74,7 @@ def invoke_enrich_ai_function():
         try:
             print(f"Error Response: {http_err.response.text}")
         except Exception:
-            pass # Ignore if can't get error response text
+            pass 
         return False
     except requests.exceptions.RequestException as e:
         print(f"[{datetime.datetime.now()}] General error calling function: {e}")
@@ -87,19 +91,20 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     if not validate_config():
+        print(f"[{datetime.datetime.now()}] Configuration validation failed. Exiting.")
         sys.exit(1)
     
     start_time = time.time()
-    # If TOTAL_RUN_DURATION_HOURS is 0 or None, run indefinitely
-    end_time = start_time + (TOTAL_RUN_DURATION_HOURS * 3600) if TOTAL_RUN_DURATION_HOURS else float('inf')
+    # If TOTAL_RUN_DURATION_HOURS is 0, run indefinitely
+    end_time = start_time + (TOTAL_RUN_DURATION_HOURS * 3600) if TOTAL_RUN_DURATION_HOURS > 0 else float('inf')
 
-    print(f"Starting AI Enrichment Scheduler...")
+    print(f"[{datetime.datetime.now()}] Starting AI Enrichment Scheduler...")
     print(f"Edge Function URL: {ENRICH_AI_FUNCTION_URL}")
-    if TOTAL_RUN_DURATION_HOURS:
+    if TOTAL_RUN_DURATION_HOURS > 0:
         print(f"Script will run for approximately {TOTAL_RUN_DURATION_HOURS} hour(s).")
     else:
-        print("Script will run indefinitely (until manually stopped).")
-    print(f"Calling AI Enrichment function every {CALL_INTERVAL_SECONDS} seconds ({(CALL_INTERVAL_SECONDS/60):.1f} minutes).")
+        print("Script will run indefinitely (TOTAL_RUN_DURATION_HOURS is 0 or less).")
+    print(f"Calling AI Enrichment function every {CALL_INTERVAL_SECONDS} seconds ({(CALL_INTERVAL_SECONDS/60.0):.1f} minutes).")
     print("Press Ctrl+C to stop gracefully.\n")
 
     try:
@@ -110,32 +115,29 @@ def main():
                 print(f"[{datetime.datetime.now()}] Shutdown initiated, breaking loop.")
                 break
             
-            # Check if it's time to stop before sleeping
-            if time.time() >= end_time and TOTAL_RUN_DURATION_HOURS:
+            current_time_for_check = time.time()
+            if current_time_for_check >= end_time and TOTAL_RUN_DURATION_HOURS > 0:
                 print(f"[{datetime.datetime.now()}] Run duration completed before sleep interval.")
                 break
 
             print(f"[{datetime.datetime.now()}] Sleeping for {CALL_INTERVAL_SECONDS} seconds...")
             
-            # Sleep in smaller chunks to allow for more responsive shutdown
             sleep_remaining = CALL_INTERVAL_SECONDS
             while sleep_remaining > 0 and not shutdown_requested:
-                # Ensure we don't sleep past the total end time
-                current_time = time.time()
-                if current_time >= end_time and TOTAL_RUN_DURATION_HOURS:
+                current_time_for_sleep_check = time.time()
+                if current_time_for_sleep_check >= end_time and TOTAL_RUN_DURATION_HOURS > 0:
                     break 
                 
-                # Determine how long to sleep in this chunk
-                time_until_end = (end_time - current_time) if TOTAL_RUN_DURATION_HOURS else float('inf')
-                chunk_sleep = min(sleep_remaining, 10, time_until_end) # Sleep in 10-second chunks or less
+                time_until_end_for_sleep = (end_time - current_time_for_sleep_check) if TOTAL_RUN_DURATION_HOURS > 0 else float('inf')
+                chunk_sleep = min(sleep_remaining, 10, time_until_end_for_sleep) 
                 
-                if chunk_sleep <= 0: # No more time left to sleep within total duration
+                if chunk_sleep <= 0: 
                     break
 
                 time.sleep(chunk_sleep)
                 sleep_remaining -= chunk_sleep
         
-        if not shutdown_requested and TOTAL_RUN_DURATION_HOURS and time.time() >= end_time:
+        if not shutdown_requested and TOTAL_RUN_DURATION_HOURS > 0 and time.time() >= end_time:
             print(f"[{datetime.datetime.now()}] Total run duration of {TOTAL_RUN_DURATION_HOURS} hour(s) completed.")
 
     except Exception as e:
