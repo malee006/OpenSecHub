@@ -6,7 +6,7 @@ on:
     # IMPORTANT: GitHub Actions cron jobs can sometimes be delayed.
     # The shortest interval GitHub officially guarantees is every 5 minutes.
     # '*/3 * * * *' might work, but '*/5 * * * *' is safer for reliability.
-    - cron: '*/3 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
 
 jobs:
