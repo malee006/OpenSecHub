@@ -1,0 +1,15 @@
+name: Trigger Supabase Enrichment Workflow
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs at the top of every hour
+  workflow_dispatch:    # Allows you to run it manually from the Actions tab
+
+jobs:
+  enrich-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Supabase Edge Function
+        run: |
+          curl -i --location --request POST '${{ secrets.SUPABASE_URL }}/functions/v1/enrich-tool' \
+          --header 'Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}'
