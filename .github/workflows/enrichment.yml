@@ -33,6 +33,6 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           
           # You can configure these directly here or also use secrets if preferred
-          CALL_INTERVAL_SECONDS: '300'   # e.g., 300 seconds = 5 minutes
+          CALL_INTERVAL_SECONDS: '40'   # e.g., 300 seconds = 5 minutes
           TOTAL_RUN_DURATION_HOURS: '1' # e.g., Run for 1 hour
         run: python enrich-ai-scheduler.py # Replace with the actual name of your Python script file
