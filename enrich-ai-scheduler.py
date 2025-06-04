@@ -12,7 +12,7 @@ ENRICH_AI_FUNCTION_URL = os.getenv('ENRICH_AI_FUNCTION_URL', 'https://oztlbsrmkz
 SUPABASE_ANON_KEY = os.getenv('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96dGxic3Jta3plc2Zsc3ptc2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg2NTg2MTcsImV4cCI6MjA2NDIzNDYxN30.lja2lGa9t6SNkhdLOidPLK3geSX12WUGkCkN_E9Fj00')
 
 # How often to call the enrich-ai function (in seconds)
-CALL_INTERVAL_SECONDS = int(os.getenv('CALL_INTERVAL_SECONDS', 30))  # Default to 5 minutes
+CALL_INTERVAL_SECONDS = int(os.getenv('CALL_INTERVAL_SECONDS', 300))  # Default to 5 minutes
 # Total duration the script should run (in hours)
 TOTAL_RUN_DURATION_HOURS = int(os.getenv('TOTAL_RUN_DURATION_HOURS', 1)) # Default to 1 hour
 
