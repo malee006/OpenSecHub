@@ -11,5 +11,5 @@ jobs:
     steps:
       - name: Trigger Supabase Edge Function
         run: |
-          curl -i --location --request POST '${{ secrets.SUPABASE_URL }}/functions/v1/enrich-tool' \
+          curl -i --location --request POST '${{ secrets.SUPABASE_URL }}/functions/v1/enrich-ai' \
           --header 'Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}'
