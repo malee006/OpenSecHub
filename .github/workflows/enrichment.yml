@@ -1,15 +1,38 @@
-name: Trigger Supabase Enrichment Workflow
+name: Python AI Enrichment Scheduler
 
 on:
   schedule:
-    - cron: '0 * * * *' # Runs at the top of every hour
-  workflow_dispatch:    # Allows you to run it manually from the Actions tab
+    # Example: Runs every 6 hours. Adjust cron schedule as needed.
+    # See https://crontab.guru/ for cron schedule help
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
-  enrich-data:
+  run-python-scheduler:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Supabase Edge Function
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10' # Or your preferred Python version
+
+      - name: Install dependencies
         run: |
-          curl -i --location --request POST '${{ secrets.SUPABASE_URL }}/functions/v1/enrich-ai' \
-          --header 'Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}'
+          python -m pip install --upgrade pip
+          pip install requests 
+          # Add other dependencies from your script if any (e.g., python-dotenv if you were using it)
+
+      - name: Run Python Scheduler Script
+        env:
+          # These secrets must be configured in your GitHub repository settings
+          # Go to Settings > Secrets and variables > Actions > New repository secret
+          ENRICH_AI_FUNCTION_URL: ${{ secrets.ENRICH_AI_FUNCTION_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          
+          # You can configure these directly here or also use secrets if preferred
+          CALL_INTERVAL_SECONDS: '300'   # e.g., 300 seconds = 5 minutes
+          TOTAL_RUN_DURATION_HOURS: '1' # e.g., Run for 1 hour
+        run: python enrich-ai-scheduler.py # Replace with the actual name of your Python script file
