@@ -1,0 +1,40 @@
+name: Call Supabase Sync Function
+
+on:
+  schedule:
+    # Runs every 3 minutes.
+    # IMPORTANT: GitHub Actions cron jobs can sometimes be delayed.
+    # The shortest interval GitHub officially guarantees is every 5 minutes.
+    # '*/3 * * * *' might work, but '*/5 * * * *' is safer for reliability.
+    - cron: '*/3 * * * *'
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+
+jobs:
+  call-supabase-function:
+    runs-on: ubuntu-latest # Use a standard Linux runner
+    steps:
+      - name: Call Supabase Edge Function
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY_SECRET }} # Use a repository secret
+          FUNCTION_URL: "https://oztlbsrmkzesflszmsem.supabase.co/functions/v1/github-sync"
+        run: |
+          echo "Attempting to call Edge Function: $FUNCTION_URL"
+          response=$(curl -s -w "\nHTTP_STATUS:%{http_code}\n" -X POST "$FUNCTION_URL" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+
+          echo "Full response with status: $response"
+          http_status=$(echo "$response" | grep "HTTP_STATUS:" | cut -d':' -f2)
+
+          if [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+            echo "Function call successful! Status Code: $http_status"
+            echo "Response body:"
+            echo "$response" | sed '$d' # Print response body (removes the HTTP_STATUS line)
+          else
+            echo "Error calling function. Status Code: $http_status"
+            echo "Response body:"
+            echo "$response" | sed '$d' # Print response body
+            exit 1 # Fail the workflow step
+          fi
