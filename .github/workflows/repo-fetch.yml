@@ -38,4 +38,4 @@ jobs:
           # For scheduled runs, it will use this value directly.
           # For manual (workflow_dispatch) runs, it uses the input if provided, otherwise this value.
           PROCESSING_BATCH_SIZE: ${{ github.event.inputs.batch_size_input || '5' }} # Uses manual input or defaults to '5'
-        run: python scripts/git-repo-fetch.py
+        run: python git-repo-fetch.py
