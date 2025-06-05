@@ -1,10 +1,10 @@
 # scripts/run_fetch.py
 import os
-import httpx # Using httpx for HTTP requests
+import httpx
 from supabase import create_client, Client
-from dotenv import load_dotenv # For loading .env file for local development
+from dotenv import load_dotenv
 import logging
-import json # For parsing JSON responses
+import json
 
 # Configure basic logging
 logging.basicConfig(
@@ -13,31 +13,21 @@ logging.basicConfig(
 )
 
 def main():
-    """
-    Main function to query for tools needing updates and trigger the Supabase Edge Function.
-    """
-    # 1. Load environment variables from .env file (optional, good for local dev)
-    # In production, these should be set directly in the environment.
     load_dotenv()
 
     supabase_url = os.getenv("SUPABASE_URL")
-    supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") # Service role key
+    supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     supabase_function_url = os.getenv("SUPABASE_FUNCTION_URL")
-    # e.g., "https://<your-project-ref>.supabase.co/functions/v1/fetch_and_store_repo"
 
-    # Read batch size from environment variable, with a default
     try:
-        # This is the variable you'll set in GitHub Actions.
-        # For testing, you might set this to a small number like '2' or '3'.
-        batch_size = int(os.getenv("PROCESSING_BATCH_SIZE", "10")) # Default to 10 if not set
-        if batch_size <= 0: # Ensure positive batch size
+        batch_size = int(os.getenv("PROCESSING_BATCH_SIZE", "10"))
+        if batch_size <= 0:
             logging.warning(f"PROCESSING_BATCH_SIZE ('{os.getenv('PROCESSING_BATCH_SIZE')}') was zero or negative, defaulting to 10.")
             batch_size = 10
     except ValueError:
         logging.warning(f"PROCESSING_BATCH_SIZE ('{os.getenv('PROCESSING_BATCH_SIZE')}') was not a valid integer, defaulting to 10.")
-        batch_size = 10 # Default if conversion fails
+        batch_size = 10
 
-    # Validate that all necessary environment variables are set
     if not all([supabase_url, supabase_service_key, supabase_function_url]):
         logging.error(
             "Missing critical environment variables. Ensure SUPABASE_URL, "
@@ -46,21 +36,16 @@ def main():
         return
 
     try:
-        # Initialize Supabase client using the service role key for admin-level access
         supabase: Client = create_client(supabase_url, supabase_service_key)
     except Exception as e:
         logging.error(f"Failed to initialize Supabase client: {e}")
         return
 
-    # 2. Query for tools to process using the pre-defined SQL function via RPC
     logging.info(f"Querying for up to {batch_size} tool(s) that need fetching or updating...")
     try:
-        # Call the SQL function, passing the batch size
-        # Ensure the SQL function 'get_existing_tools_to_update_batched' exists in your DB
-        # and accepts 'p_limit' as an integer parameter.
         response = supabase.rpc(
-            'get_existing_tools_to_update_batched', # Make sure this function name is correct
-            {'p_limit': batch_size} # Pass the batch size as a parameter
+            'get_existing_tools_to_update_batched', # This must match the SQL function name
+            {'p_limit': batch_size}
         ).execute()
 
         if response.error:
@@ -79,7 +64,6 @@ def main():
 
     logging.info(f"Found {len(tools_to_process)} tool(s) to process in this batch (max was {batch_size}).")
 
-    # 3. Invoke the Edge Function for each tool
     with httpx.Client() as client:
         for tool_data in tools_to_process:
             raw_tool_id = tool_data.get('raw_tool_id')
