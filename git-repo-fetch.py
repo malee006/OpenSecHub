@@ -1,7 +1,9 @@
 # scripts/run_fetch.py
 import os
-import httpx
+import httpx # Import httpx to catch its specific exceptions
 from supabase import create_client, Client
+# from supabase.lib.client_options import ClientOptions # If needing specific options
+# from postgrest import APIError # Import if checking instance type of error
 from dotenv import load_dotenv
 import logging
 import json
@@ -42,28 +44,84 @@ def main():
         return
 
     logging.info(f"Querying for up to {batch_size} tool(s) that need fetching or updating...")
+    
+    response = None # Initialize response to None
     try:
         response = supabase.rpc(
-            'get_existing_tools_to_update_batched', # This must match the SQL function name
+            'get_existing_tools_to_update_batched',
             {'p_limit': batch_size}
         ).execute()
 
-        if response.error:
-            logging.error(f"Error querying tools via RPC: {response.error.message} (Code: {response.error.code}, Details: {response.error.details})")
+        # --- Enhanced Debugging and Error Handling ---
+        logging.info(f"RPC raw response type: {type(response)}")
+        logging.info(f"RPC raw response attributes: {dir(response)}")
+        # It's good practice to log the response status if available, though execute() might hide it
+        # logging.info(f"RPC response status if available: {getattr(response, 'status_code', 'N/A')}")
+
+
+        # Check for errors more safely
+        rpc_error_obj = getattr(response, 'error', None) # Get 'error' attribute, default to None if not found
+
+        if rpc_error_obj:
+            # If rpc_error_obj is an object with attributes like message, code, details:
+            error_message = getattr(rpc_error_obj, 'message', str(rpc_error_obj))
+            error_code = getattr(rpc_error_obj, 'code', 'UnknownErrorCode')
+            error_details = getattr(rpc_error_obj, 'details', 'NoDetails')
+            logging.error(f"Error querying tools via RPC (from response.error): {error_message} (Code: {error_code}, Details: {error_details})")
+            return # Stop further processing if an error is explicitly found in response.error
+
+        # If response.error attribute doesn't exist or is None,
+        # check if data itself looks like an error (sometimes PostgREST might return errors in data with HTTP 200)
+        # This is less common if .error is properly populated by supabase-py, but as a fallback.
+        # A successful data response from this RPC should be a list.
+        if hasattr(response, 'data'):
+            if isinstance(response.data, dict) and response.data.get('message'):
+                # This might indicate an error structure within the data payload
+                logging.error(f"Potential error in RPC response data: {response.data.get('message')} (Code: {response.data.get('code', 'N/A')})")
+                # Decide if this should be a hard return or if data could still be processed
+                # For now, let's assume if .error wasn't set, and data is not a list, it might be an issue
+                if not isinstance(response.data, list):
+                     logging.warning("RPC response data is not a list as expected. Further processing might fail.")
+                     # Depending on strictness, you might want to 'return' here.
+            
+            tools_to_process = response.data if isinstance(response.data, list) else []
+            if not isinstance(response.data, list):
+                 logging.info(f"RPC response.data was not a list, received type: {type(response.data)}. tools_to_process initialized as empty list.")
+
+
+        else: # response object does not even have a 'data' attribute
+            logging.error(f"RPC response object does not have a 'data' attribute. This is unexpected. Full response: {str(response)[:500]}") # Log first 500 chars
             return
 
-        tools_to_process = response.data if response.data else []
 
-    except Exception as e:
-        logging.error(f"An exception occurred during Supabase RPC query: {e}")
+    # Catching specific HTTP errors that might be raised by .execute()
+    except httpx.HTTPStatusError as e:
+        # This will catch errors like 404 Not Found, 500 Internal Server Error, etc.
+        # if supabase-py (or underlying httpx) raises them.
+        error_body = "No response body"
+        try:
+            if e.response and hasattr(e.response, 'text'):
+                error_body = e.response.text
+            elif e.response and hasattr(e.response, 'content'):
+                error_body = e.response.content.decode(errors='ignore') # Try to decode if binary
+        except Exception:
+            pass # Ignore errors during error body extraction for logging
+        logging.error(f"HTTP error during Supabase RPC query: Status {e.response.status_code if e.response else 'N/A'} - Body: {error_body}", exc_info=False)
         return
+    except Exception as e: # Catch any other exceptions during the RPC call or initial response handling
+        logging.error(f"An unhandled exception occurred during Supabase RPC query or initial response processing: {e}", exc_info=True) # exc_info=True logs stack trace
+        return
+    # --- End of Enhanced Debugging and Error Handling ---
 
-    if not tools_to_process:
-        logging.info("No tools found requiring an update in this batch.")
+
+    if not tools_to_process: # tools_to_process would be an empty list if errors occurred above and led to it
+        logging.info("No tools found requiring an update in this batch (or an error occurred before processing).")
         return
 
     logging.info(f"Found {len(tools_to_process)} tool(s) to process in this batch (max was {batch_size}).")
 
+    # ... (rest of your script to iterate through tools_to_process and call Edge Function)
+    # This part remains the same as your previous version
     with httpx.Client() as client:
         for tool_data in tools_to_process:
             raw_tool_id = tool_data.get('raw_tool_id')
@@ -109,7 +167,7 @@ def main():
             except httpx.RequestError as e:
                 logging.error(f"HTTP request to Edge Function failed for {raw_tool_id} ({html_url}): {e}")
             except Exception as e:
-                logging.error(f"An unexpected error occurred while calling Edge Function for {raw_tool_id}: {e}")
+                logging.error(f"An unexpected error occurred while calling Edge Function for {raw_tool_id}: {e}", exc_info=True)
 
     logging.info("Python scheduler script finished processing batch.")
 
