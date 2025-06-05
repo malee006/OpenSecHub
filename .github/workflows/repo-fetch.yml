@@ -1,0 +1,41 @@
+name: Scheduled Repo Fetcher
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Runs every hour
+  workflow_dispatch: # Allows manual triggering
+    inputs: # Define inputs for manual trigger
+      batch_size_input:
+        description: 'Number of repos to process in this run'
+        required: false # Make it optional, Python script has a default
+        default: '5'   # Default for manual runs if not specified
+        type: string   # Inputs are strings, Python script will convert
+
+jobs:
+  fetch_and_store_repos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install supabase python-dotenv httpx
+
+      - name: Run Python script to fetch repos
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_FUNCTION_URL: ${{ secrets.SUPABASE_FUNCTION_URL }}
+
+          # Here's how you set the batch size:
+          # For scheduled runs, it will use this value directly.
+          # For manual (workflow_dispatch) runs, it uses the input if provided, otherwise this value.
+          PROCESSING_BATCH_SIZE: ${{ github.event.inputs.batch_size_input || '5' }} # Uses manual input or defaults to '5'
+        run: python scripts/git-repo-fetch.py
