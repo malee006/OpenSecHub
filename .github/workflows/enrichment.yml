@@ -4,7 +4,7 @@ on:
   schedule:
     # Example: Runs every 6 hours. Adjust cron schedule as needed.
     # See https://crontab.guru/ for cron schedule help
-    - cron: '0 */6 * * *'
+    # cron: '0 */6 * * *'
   workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
